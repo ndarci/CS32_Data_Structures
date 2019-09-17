@@ -1,0 +1,292 @@
+report.txt
+===========
+
+Nicholas Darci-Maher
+ID #504924547
+Computer Science 32
+Professor David Smallberg
+21 May 2019
+
+Report for Project 3: Kalah
+
+DESIGN OF MY CLASSES:
+
+Board:
+I created the board with two vectors (one for each side) and two int variables for both of the pots.
+I added sowNorth and sowSouth to help me sow beans. Depending on the side called, I would call one of those and it would do all the work for me.
+I made moveToPot by deleting the beans in the input hole and transferring them into the input pot.
+
+Player:
+I had my base class define most of the functions needed for every kind of player. 
+HumanPlayer simply added a new implementation for isInteractive (returns true) and an interactive chooseMove function.
+BadPlayer just chose the leftmost valid move and returned it.
+SmartPlayer's public chooseMove function started a timer and called the private chooseMove function I designed, which used recursion to create a game tree of hypothetical game situations and search it for the best outcome.
+My base case for recursion was either the game ending or the timer running out, so my chooseMove function takes the full 5 seconds whenever there are a significant amount of moves to consider (usually >4).
+
+Game:
+I created every game with a copy of the board that was passed to it and pointers to both the players passed to it.
+A game stored those player pointers, as well as variables for whose turn it was, if the game was over, if there was a winner, and who the winner was.
+I also included a short function called pressEnter for when the game was created with two non-interactive players, which prompts the user to press enter before continuing.
+
+DESIGN OF SmartPlayer::chooseMove:
+
+within SmartPlayer...
+
+The public version of chooseMove simply started a timer, set up the proper variables to call my private function, and called my private function.
+
+The private version of chooseMove did the following:
+
+m_chooseMove...
+First, I created a stack of the valid moves on the player's own side.
+Then I checked base cases (either timer is done or the game is over). If a base case was reached, I stored the current evaluation of that board position and returned.
+If this wasn't a base case, I created variables to store the current best move and best evaluation value.
+Then I iterated through each valid move. For each valid move...
+I checked again if the timer had run out.
+I copied the current board state and simulated how THIS valid move would change the board.
+With the new changed board, I passed it to private chooseMove again (on the same timer, with the opponent's perspective) to simulate a countermove to the original simulated move.
+If this move + countermove combination resulted in a better outcome for THIS player than our current best value, I changed our current best variables to reflect that.
+
+evaluate...
+To evaluate a board position, I operated on one heuristic: the difference between SOUTH's pot and NORTH's pot. Thus the SOUTH player liked higher values, and the NORTH player liked lower values.
+If a board position represented the end of the game, or one player had a majority of the beans, I returned either 999 (SOUTH wins), -999 (NORTH wins), or 0 (a tie).
+
+doNextMove...
+To simulate changing the board, I called another function similar to Game::move but that included the timer and did not write to cout.
+This function performed a full move from start to finish and changed the board passed to it to reflect that move.
+If this move caused the player to get another turn, the simulation function called chooseMove (the private version) again on the same timer to see how to proceed.
+
+PSEUDOCODE:
+
+Board::sow
+Check against invalid holes
+Remember the amount of beans in this hole
+Set this hole's beans to 0
+Start at the input hole:
+While we still have beans to sow and we haven't reached the end of this side,
+	add one to each subsequent hole on this side
+While we have more beans,
+	add one to our pot
+	add one to each hole on opponent's side until we reach the end or run out
+While we have more beans,
+	add one to our side (starting at the beginning) until we reach the end or run out
+If we have more, repeat from right before we add to our pot
+Remember where our last bean was placed: set output parameters to that hole and Side
+
+SmartPlayer::chooseMove (public)
+Start the timer
+call the private chooseMove
+
+SmartPlayer::m_chooseMove (private)
+create a stack of valid moves
+if the stack is empty or the timer ran out,
+	set output value to the current board's value and return
+set our current best value to the current board's value
+set our current best move to the top of the stack (arbitrary)
+while the stack still has moves on it,
+	get the top move off the stack
+	pop the stack
+	copy the board
+	simulate the next move on the board's copy
+	initialize new best move and value variables
+	use these new variables and the new version of the board to recursively call this same function from the opponent's perspective
+	check if this move and countermove is beneficial:
+		if we're SOUTH,
+			check if the new value is greater than the current best
+		if we're NORTH,
+			check if the new value is less than the current best
+	if it was beneficial,
+		set our current best value to the new value, and our current best move to the current move (go down this path in the tree)
+after every move has been considered,
+set our move output parameter to the current best move (will be the overall best move)
+
+SmartPlayer::m_doNextMove (simulates next move)
+sow from the hole we're at
+if we landed in a pot,
+	call m_chooseMove to figure out where to go next
+	call this function recursively to simulate the subsequent move we just got from m_chooseMove
+if we landed in an empty hole with beans across from it,
+	move the beans from the hole we landed in and the opposite hole to our pot
+if the game is now over,
+	sweep all the beans from the side that still has beans into that player's pot
+
+Game::move
+check status
+if the game is over,
+	display the board
+	sweep the beans on the side with beans on it into that player's pot
+	return false
+call a private move function
+check status
+if the game is over,
+	call this function again so we can sweep the beans
+return true
+
+Game::m_move (private, separate versions for NORTH and SOUTH)
+call this Player's chooseMove function
+sow the board from the hole chooseMove output
+if we landed in a pot,
+	check status
+	if the game is over, return
+	display the board
+	call this function recursively to make the next turn
+if we landed in an empty hole with beans opposite it,
+	move the beans in this hole and the opposite hole to our pot
+
+Game::play
+display the board
+while move returns true (the game is not over),
+	check status
+	if the game's over,
+		break out of this loop
+	display the board
+	if neither player is interactive, ask the user to press enter
+display the board
+check status
+if there is a winner,
+	announce the winner
+otherwise,
+	announce the tie
+
+BUGS/INEFFICIENCIES/PROBLEMS:
+Because I'm limited to 5 seconds, my function behaves a lot smarter when the end is in sight (fewer beans in play, smaller board, etc) than when the game tree is extremely deep. It tends to solely go for getting another move and doing whatever will pass a sow through its own pot, until it has enough bandwidth to consider more intelligent moves. However, I find that even I have a hard time going back and forth with all the possible countermoves at the beginning of a game with 6 holes and 4 beans per hole. 
+
+Most of my misgivings about this project come from my choice to use a stack inside my recursive function, and the fact that my recursion jumps between two functions when a player is simulating a turn that includes multiple moves. I know we've never used stacks and recursion at the same time, but it seemed like the best implementation to me. I'd be curious to see how someone solved this problem without some way to store the valid moves. 
+
+Overall this program passed all of my test cases and the basic ones on the spec. It should perform well against the cases it's tested with for grading (hopefully!)
+
+TEST CASES:
+    
+    // testing Board...
+    // testing sow...
+    //  2 2 2
+    // 0     0
+    //  2 2 2
+    Board b(3, 2);
+    Side endS = SOUTH;
+    int endH = 1;
+    // normal case
+    assert(b.sow(SOUTH, 1, endS, endH));
+    assert(endS == SOUTH && endH == 3 && b.beans(SOUTH, 3) == 3);
+    //  2 2 2
+    // 0     0
+    //  0 3 3
+    // lands in a hole
+    assert(b.sow(NORTH, 2, endS, endH));
+    assert(endS == NORTH && endH == 0 && b.beans(NORTH, 0 == 1));
+    //  3 0 2
+    // 1     0
+    //  0 3 3
+    // long sow that wraps around
+    b.setBeans(SOUTH, 3, 10);
+    //  3 0 2
+    // 1      0
+    //  0 3 10
+    assert(b.sow(SOUTH, 3, endS, endH));
+    assert(endS == NORTH && endH == 2 && b.beans(SOUTH, 3) == 1);
+    //  4 2 4
+    // 1     2
+    //  1 4 1
+    // testing moveToPot...
+    // normal case
+    assert(b.moveToPot(SOUTH, 2, SOUTH));
+    assert(b.beans(SOUTH, 2) == 0 && b.beans(SOUTH, 0) == 6);
+    //  4 2 4
+    // 1     6
+    //  1 0 1
+    // counter case, should be false
+    assert(b.moveToPot(NORTH, 0, SOUTH) == false);
+    
+    // testing Player...
+    // testing HumanPlayer...
+    Board c(3, 0);
+    c.setBeans(SOUTH, 1, 1);
+    c.setBeans(NORTH, 2, 1);
+    //  0 1 0
+    // 1     6
+    //  1 0 0
+    HumanPlayer h("morty");
+    // regular case
+    cerr << "Tester: choose hole 1" << endl;
+    assert(h.chooseMove(c, SOUTH) == 1);
+    // case where chooseMove must reprompt for valid move
+    c.setBeans(SOUTH, 1, 0);
+    c.setBeans(SOUTH, 2, 1);
+    cerr << "Tester: choose hole 1" << endl;
+    assert(h.chooseMove(c, SOUTH) == 2);
+    
+    // testing BadPlayer...
+    BadPlayer bad("charlie");
+    // regular case
+    assert(bad.chooseMove(c, NORTH) == 2);
+    
+    // testing SmartPlayer...
+    SmartPlayer s("dolores");
+    // regular case
+    assert(s.chooseMove(c, NORTH) == 2);
+    //  0 1 0
+    // 0     0
+    //  3 2 1
+    Board b1(3,0);
+    b1.setBeans(SOUTH, 1, 3);
+    b1.setBeans(SOUTH, 2, 2);
+    b1.setBeans(SOUTH, 3, 1);
+    b1.setBeans(NORTH, 2, 1);
+    // win-in-one-turn case
+    assert(s.chooseMove(b1, SOUTH) == 3);
+    
+    // testing Game...
+    
+    //  2 2 2
+    // 0     0
+    //  2 2 2
+    Board d(3, 2);
+    BadPlayer p1("ren");
+    BadPlayer p2("stimpy");
+    Game g(d, &p1, &p2);
+    // p1 goes first
+    // testing move...
+    // normal cases
+    assert(g.move());
+    //  2 2 2
+    // 0     0
+    //  0 3 3
+    assert(g.beans(SOUTH, 3) == 3);
+    assert(g.move());
+    //  0 2 2
+    // 1     0
+    //  1 3 3
+    assert(g.beans(SOUTH, 1) == 1);
+    assert(g.move());
+    //  0 2 2
+    // 1     0
+    //  0 4 3
+    // go-again case
+    assert(g.move());
+    //  1 1 0
+    // 3     0
+    //  0 4 3
+    assert(g.beans(NORTH, 0) == 3 && g.beans(NORTH, 3) == 0);
+    // capture case
+    d.setBeans(SOUTH, 3, 0);
+    //  2 2 2
+    // 0     0
+    //  2 2 0
+    Game g2(d, &p1, &p2);
+    assert(g2.move());
+    //  2 2 0
+    // 0     3
+    //  0 3 0
+    assert(g2.beans(SOUTH, 0) == 3 && g2.beans(SOUTH, 3) == 0 && g2.beans(NORTH, 3) == 0);
+    // testing play...
+    // checking that a game between two computer players will eventually end
+    Board e(3, 2);
+    SmartPlayer br("bret");
+    SmartPlayer je("jemaine");
+    Game g3(e, &br, &je);
+    g3.play();
+    bool isO, hasW = false;
+    Side winner = SOUTH;
+    g3.status(isO, hasW, winner);
+    assert(isO);
+
+//(smaller functions need not be tested because the correct behavior of these more advanced functions rests on their working properly)
